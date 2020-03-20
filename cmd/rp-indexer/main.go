@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/evalphobia/logrus_sentry"
+	indexer "github.com/istresearch/rp-indexer"
 	_ "github.com/lib/pq"
 	"github.com/nyaruka/ezconf"
-	indexer "github.com/istresearch/rp-indexer"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -98,7 +98,7 @@ func main() {
 		log.WithField("last_modified", lastModified).WithField("index", physicalIndex).Info("indexing contacts newer than last modified")
 
 		// now index our docs
-		indexed, deleted, err := indexer.IndexContacts(db, config.ElasticURL, physicalIndex, lastModified.Add(-5*time.Second))
+		indexed, deleted, err := indexer.IndexContacts(db, config.ElasticURL, physicalIndex, lastModified)
 		if err != nil {
 			logError(config.Rebuild, err, "error indexing contacts")
 			continue
