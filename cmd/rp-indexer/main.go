@@ -8,7 +8,7 @@ import (
 	"github.com/evalphobia/logrus_sentry"
 	_ "github.com/lib/pq"
 	"github.com/nyaruka/ezconf"
-	indexer "github.com/nyaruka/rp-indexer"
+	indexer "github.com/istresearch/rp-indexer"
 	log "github.com/sirupsen/logrus"
 )
 
