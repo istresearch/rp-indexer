@@ -397,7 +397,7 @@ SELECT org_id, id, modified_on, is_active, row_to_json(t) FROM (
           ) g
    ) as groups
   FROM contacts_contact
-  WHERE modified_on >= $1
+  WHERE modified_on > $1
   ORDER BY modified_on ASC
   LIMIT 500000
 ) t;
@@ -479,101 +479,96 @@ const indexSettings = `
 	},
 
 	"mappings": {
-		"_doc": {
-			"_routing": {
-				"required": true
+		"properties": {
+			"fields": {
+				"type": "nested",
+				"properties": {
+					"field": {
+						"type": "keyword"
+					},
+					"text": {
+						"type": "keyword",
+						"normalizer": "lowercase"
+					},
+					"number": {
+						"type": "scaled_float",
+						"scaling_factor": 10000
+					},
+					"datetime": {
+						"type": "date"
+					},
+					"state": {
+						"type": "text",
+						"analyzer": "locations"
+					},
+                    "state_keyword": {
+						"type": "keyword",
+						"normalizer": "lowercase"
+                    },
+					"district": {
+						"type": "text",
+						"analyzer": "locations"
+					},
+					"district_keyword": {
+						"type": "keyword",
+						"normalizer": "lowercase"
+                    },
+					"ward": {
+						"type": "text",
+						"analyzer": "locations"
+					},
+					"ward_keyword": {
+						"type": "keyword",
+						"normalizer": "lowercase"
+                    }
+				}
 			},
-			"properties": {
-				"fields": {
-					"type": "nested",
-					"properties": {
-						"field": {
-							"type": "keyword"
-						},
-						"text": {
-							"type": "keyword",
-							"normalizer": "lowercase"
-						},
-						"number": {
-							"type": "scaled_float",
-							"scaling_factor": 10000
-						},
-						"datetime": {
-							"type": "date"
-						},
-						"state": {
-							"type": "text",
-							"analyzer": "locations"
-						},
-                        "state_keyword": {
-							"type": "keyword",
-							"normalizer": "lowercase"
-                        },
-						"district": {
-							"type": "text",
-							"analyzer": "locations"
-						},
-						"district_keyword": {
-							"type": "keyword",
-							"normalizer": "lowercase"
-                        },
-						"ward": {
-							"type": "text",
-							"analyzer": "locations"
-						},
-						"ward_keyword": {
-							"type": "keyword",
-							"normalizer": "lowercase"
-                        }
-					}
-				},
-				"urns": {
-					"type": "nested",
-					"properties": {
-						"path": {
-							"type": "text",
-							"analyzer": "trigrams",
-							"fields": {
-								"keyword": {
-									"type": "keyword",
-									"normalizer": "lowercase"
-								}
+			"urns": {
+				"type": "nested",
+				"properties": {
+					"path": {
+						"type": "text",
+						"analyzer": "trigrams",
+						"fields": {
+							"keyword": {
+								"type": "keyword",
+								"normalizer": "lowercase"
 							}
-						},
-						"scheme": {
-							"type": "keyword",
-							"normalizer": "lowercase"
 						}
+					},
+					"scheme": {
+						"type": "keyword",
+						"normalizer": "lowercase"
 					}
-				},
-				"groups": {
-					"type": "keyword"
-				},
-				"uuid": {
-					"type": "keyword"
-				},
-				"language": {
-					"type": "keyword",
-					"normalizer": "lowercase"
-				},
-				"modified_on": {
-					"type": "date"
-				},
-				"created_on": {
-					"type": "date"
-				},
-				"modified_on_mu": {
-					"type": "long"
-				},
-				"name": {
-					"type": "text",
-					"analyzer": "prefix",
-					"search_analyzer": "name_search",
-					"fields": {
-						"keyword": {
-							"type": "keyword",
-							"normalizer": "lowercase"
-						}
+				}
+			},
+			"groups": {
+				"type": "keyword"
+			},
+			"uuid": {
+				"type": "keyword"
+			},
+			"language": {
+				"type": "keyword",
+				"normalizer": "lowercase"
+			},
+			"modified_on": {
+				"type": "date"
+			},
+			"created_on": {
+				"type": "date"
+			},
+			"modified_on_mu": {
+				"type": "long"
+			},
+			"name": {
+				"type": "text",
+				"analyzer": "prefix",
+				"search_analyzer": "name_search",
+				"fields": {
+					"keyword": {
+						"type": "keyword",
+						"normalizer": "lowercase"
 					}
 				}
 			}
@@ -586,10 +581,10 @@ const indexSettings = `
 const lastModifiedQuery = `{ "sort": [{ "modified_on_mu": "desc" }]}`
 
 // indexes a contact
-const indexCommand = `{ "index": { "_id": %d, "_type": "_doc", "_version": %d, "_version_type": "external", "_routing": %d} }`
+const indexCommand = `{ "index": { "_id": %d, "_type": "_doc", "version": %d, "version_type": "external", "routing": %d } }`
 
 // deletes a contact
-const deleteCommand = `{ "delete" : { "_id": %d, "_type": "_doc", "_version": %d, "_version_type": "external", "_routing": %d} }`
+const deleteCommand = `{ "delete" : { "_id": %d, "_type": "_doc", "version": %d, "version_type": "external", "routing": %d } }`
 
 // adds an alias for an index
 type addAliasCommand struct {
@@ -615,8 +610,11 @@ type aliasCommand struct {
 // our response for finding the most recent contact
 type queryResponse struct {
 	Hits struct {
-		Total int `json:"total"`
-		Hits  []struct {
+		Total struct {
+			Value    int    `json:"value"`
+			Relation string `json:"relation"`
+		} `json:"total"`
+		Hits []struct {
 			Source struct {
 				ID         int64     `json:"id"`
 				ModifiedOn time.Time `json:"modified_on"`
