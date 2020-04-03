@@ -1,4 +1,4 @@
-module github.com/istresearch/rp-indexer
+module github.com/nyaruka/rp-indexer
 
 require (
 	github.com/certifi/gocertifi v0.0.0-20180118203423-deb3ae2ef261

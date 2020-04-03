@@ -397,7 +397,7 @@ SELECT org_id, id, modified_on, is_active, row_to_json(t) FROM (
           ) g
    ) as groups
   FROM contacts_contact
-  WHERE modified_on > $1
+  WHERE modified_on >= $1
   ORDER BY modified_on ASC
   LIMIT 500000
 ) t;
@@ -581,10 +581,10 @@ const indexSettings = `
 const lastModifiedQuery = `{ "sort": [{ "modified_on_mu": "desc" }]}`
 
 // indexes a contact
-const indexCommand = `{ "index": { "_id": %d, "_type": "_doc", "version": %d, "version_type": "external", "routing": %d } }`
+const indexCommand = `{ "index": { "_id": %d, "_type": "_doc", "_version": %d, "_version_type": "external", "_routing": %d} }`
 
 // deletes a contact
-const deleteCommand = `{ "delete" : { "_id": %d, "_type": "_doc", "version": %d, "version_type": "external", "routing": %d } }`
+const deleteCommand = `{ "delete" : { "_id": %d, "_type": "_doc", "_version": %d, "_version_type": "external", "_routing": %d} }`
 
 // adds an alias for an index
 type addAliasCommand struct {
@@ -610,11 +610,8 @@ type aliasCommand struct {
 // our response for finding the most recent contact
 type queryResponse struct {
 	Hits struct {
-		Total struct {
-			Value    int    `json:"value"`
-			Relation string `json:"relation"`
-		} `json:"total"`
-		Hits []struct {
+		Total int `json:"total"`
+		Hits  []struct {
 			Source struct {
 				ID         int64     `json:"id"`
 				ModifiedOn time.Time `json:"modified_on"`
