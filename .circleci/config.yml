@@ -41,7 +41,7 @@ jobs:
 
 workflows:
   version: 2
-  rp-indexer:
+  courier:
     jobs:
       - build:
           context: globalconfig
