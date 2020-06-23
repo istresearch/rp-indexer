@@ -477,98 +477,102 @@ const indexSettings = `
 	        }
         }
 	},
-
 	"mappings": {
-		"properties": {
-			"fields": {
-				"type": "nested",
-				"properties": {
-					"field": {
-						"type": "keyword"
-					},
-					"text": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-					},
-					"number": {
-						"type": "scaled_float",
-						"scaling_factor": 10000
-					},
-					"datetime": {
-						"type": "date"
-					},
-					"state": {
-						"type": "text",
-						"analyzer": "locations"
-					},
-                    "state_keyword": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-                    },
-					"district": {
-						"type": "text",
-						"analyzer": "locations"
-					},
-					"district_keyword": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-                    },
-					"ward": {
-						"type": "text",
-						"analyzer": "locations"
-					},
-					"ward_keyword": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-                    }
-				}
+		"_doc": {
+			"_routing": {
+				"required": true
 			},
-			"urns": {
-				"type": "nested",
-				"properties": {
-					"path": {
-						"type": "text",
-						"analyzer": "trigrams",
-						"fields": {
-							"keyword": {
-								"type": "keyword",
-								"normalizer": "lowercase"
-							}
-						}
-					},
-					"scheme": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-					}
-				}
-			},
-			"groups": {
-				"type": "keyword"
-			},
-			"uuid": {
-				"type": "keyword"
-			},
-			"language": {
-				"type": "keyword",
-				"normalizer": "lowercase"
-			},
-			"modified_on": {
-				"type": "date"
-			},
-			"created_on": {
-				"type": "date"
-			},
-			"modified_on_mu": {
-				"type": "long"
-			},
-			"name": {
-				"type": "text",
-				"analyzer": "prefix",
-				"search_analyzer": "name_search",
+			"properties": {
 				"fields": {
-					"keyword": {
-						"type": "keyword",
-						"normalizer": "lowercase"
+					"type": "nested",
+					"properties": {
+						"field": {
+							"type": "keyword"
+						},
+						"text": {
+							"type": "keyword",
+							"normalizer": "lowercase"
+						},
+						"number": {
+							"type": "scaled_float",
+							"scaling_factor": 10000
+						},
+						"datetime": {
+							"type": "date"
+						},
+						"state": {
+							"type": "text",
+							"analyzer": "locations"
+						},
+                        "state_keyword": {
+							"type": "keyword",
+							"normalizer": "lowercase"
+                        },
+						"district": {
+							"type": "text",
+							"analyzer": "locations"
+						},
+						"district_keyword": {
+							"type": "keyword",
+							"normalizer": "lowercase"
+                        },
+						"ward": {
+							"type": "text",
+							"analyzer": "locations"
+						},
+						"ward_keyword": {
+							"type": "keyword",
+							"normalizer": "lowercase"
+                        }
+					}
+				},
+				"urns": {
+					"type": "nested",
+					"properties": {
+						"path": {
+							"type": "text",
+							"analyzer": "trigrams",
+							"fields": {
+								"keyword": {
+									"type": "keyword",
+									"normalizer": "lowercase"
+								}
+							}
+						},
+						"scheme": {
+							"type": "keyword",
+							"normalizer": "lowercase"
+						}
+					}
+				},
+				"groups": {
+					"type": "keyword"
+				},
+				"uuid": {
+					"type": "keyword"
+				},
+				"language": {
+					"type": "keyword",
+					"normalizer": "lowercase"
+				},
+				"modified_on": {
+					"type": "date"
+				},
+				"created_on": {
+					"type": "date"
+				},
+				"modified_on_mu": {
+					"type": "long"
+				},
+				"name": {
+					"type": "text",
+					"analyzer": "prefix",
+					"search_analyzer": "name_search",
+					"fields": {
+						"keyword": {
+							"type": "keyword",
+							"normalizer": "lowercase"
+						}
 					}
 				}
 			}
