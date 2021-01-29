@@ -23,6 +23,15 @@ type config struct {
 	SentryDSN  string `help:"the sentry configuration to log errors to, if any"`
 }
 
+type UTCLogFormatter struct {
+	log.Formatter
+}
+
+func (u UTCLogFormatter) Format(e *log.Entry) ([]byte, error) {
+	e.Time = e.Time.UTC()
+	return u.Formatter.Format(e)
+}
+
 func main() {
 	config := config{
 		ElasticURL: "http://localhost:9200",
@@ -38,7 +47,14 @@ func main() {
 
 	// configure our logger
 	log.SetOutput(os.Stdout)
-	log.SetFormatter(&log.TextFormatter{})
+	log.SetFormatter(UTCLogFormatter{&log.JSONFormatter{
+		TimestampFormat: "2006-01-02T15:04:05.000Z",
+		FieldMap: log.FieldMap{
+			log.FieldKeyTime:  "timestamp",
+			log.FieldKeyLevel: "level",
+			log.FieldKeyMsg:   "message",
+		},
+	}})
 
 	level, err := log.ParseLevel(config.LogLevel)
 	if err != nil {
