@@ -110,6 +110,16 @@ func main() {
 			continue
 		}
 
+		// if the index didn't previously exist or we are rebuilding, remap to our alias
+		if remapAlias {
+			err := indexer.MapIndexAlias(config.ElasticURL, config.Index, physicalIndex)
+			if err != nil {
+				logError(config.Rebuild, err, "error remapping alias")
+				continue
+			}
+			remapAlias = false
+		}
+
 		start := time.Now()
 		log.WithField("last_modified", lastModified).WithField("index", physicalIndex).Info("indexing contacts newer than last modified")
 
@@ -120,16 +130,6 @@ func main() {
 			continue
 		}
 		log.WithField("added", indexed).WithField("deleted", deleted).WithField("index", physicalIndex).WithField("elapsed", time.Now().Sub(start)).Info("completed indexing")
-
-		// if the index didn't previously exist or we are rebuilding, remap to our alias
-		if remapAlias {
-			err := indexer.MapIndexAlias(config.ElasticURL, config.Index, physicalIndex)
-			if err != nil {
-				logError(config.Rebuild, err, "error remapping alias")
-				continue
-			}
-			remapAlias = false
-		}
 
 		// cleanup our aliases if appropriate
 		if config.Cleanup {
