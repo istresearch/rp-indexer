@@ -150,9 +150,6 @@
                 "status": {
                     "type": "keyword"
                 },
-                "tickets": {
-                    "type": "integer"
-                },
                 "language": {
                     "type": "keyword",
                     "normalizer": "lowercase"
