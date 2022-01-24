@@ -3,6 +3,7 @@ package indexer
 import (
 	"bytes"
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,10 +12,49 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nyaruka/gocommon/httpx"
 	log "github.com/sirupsen/logrus"
 )
 
 var batchSize = 500
+
+var retryConfig *httpx.RetryConfig
+
+func init() {
+	//setup httpx retry configuration
+	var retrycount = 5
+	var initialBackoff = 1 * time.Second
+	retryConfig = ElasticRetries(initialBackoff, retrycount)
+}
+
+func ElasticRetries(initialBackoff time.Duration, count int) *httpx.RetryConfig {
+	backoffs := make([]time.Duration, count)
+	backoffs[0] = initialBackoff
+	for i := 1; i < count; i++ {
+		backoffs[i] = backoffs[i-1] * 2
+	}
+	return &httpx.RetryConfig{Backoffs: backoffs, ShouldRetry: ShouldRetry}
+}
+func ShouldRetry(request *http.Request, response *http.Response, withDelay time.Duration) bool {
+
+	// 429 Too Many Requests is recoverable. Sometimes the server puts
+	// a Retry-After response header to indicate when the server is
+	// available to start processing request from client.
+	if response.StatusCode == http.StatusTooManyRequests {
+		return true
+	}
+
+	// check for unexpected EOF
+	bodyBytes, err := ioutil.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		log.WithError(err).Error("error reading ES response, retrying")
+		return true
+	}
+
+	response.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	return false
+}
 
 // CreateNewIndex creates a new index for the passed in alias.
 //
@@ -29,7 +69,7 @@ func CreateNewIndex(url string, alias string) (string, error) {
 	idx := 0
 
 	// check if it exists
-	for true {
+	for {
 		resp, err := http.Get(fmt.Sprintf("%s/%s", url, physicalIndex))
 		if err != nil {
 			return "", err
@@ -45,7 +85,7 @@ func CreateNewIndex(url string, alias string) (string, error) {
 	}
 
 	// initialize our index
-	createURL := fmt.Sprintf("%s/%s", url, physicalIndex)
+	createURL := fmt.Sprintf("%s/%s?include_type_name=true", url, physicalIndex)
 	_, err := MakeJSONRequest(http.MethodPut, createURL, indexSettings, nil)
 	if err != nil {
 		return "", err
@@ -132,7 +172,7 @@ func CleanupIndexes(url string, alias string) error {
 func MakeJSONRequest(method string, url string, body string, jsonStruct interface{}) (*http.Response, error) {
 	req, _ := http.NewRequest(method, url, bytes.NewReader([]byte(body)))
 	req.Header.Add("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpx.Do(http.DefaultClient, req, retryConfig, nil)
 
 	l := log.WithField("url", url).WithField("method", method).WithField("request", body)
 	if err != nil {
@@ -293,7 +333,7 @@ func IndexContacts(db *sql.DB, elasticURL string, index string, lastModified tim
 			break
 		}
 
-		elapsed := time.Now().Sub(start)
+		elapsed := time.Since(start)
 		rate := float32(processedCount) / (float32(elapsed) / float32(time.Second))
 		log.WithFields(map[string]interface{}{
 			"rate":    int(rate),
@@ -344,7 +384,7 @@ func MapIndexAlias(elasticURL string, alias string, newIndex string) error {
 const contactQuery = `
 SELECT org_id, id, modified_on, is_active, row_to_json(t) FROM (
   SELECT
-   id, org_id, uuid, name, language, is_stopped, is_blocked, is_active, created_on, modified_on,
+   id, org_id, uuid, name, language, status, ticket_count AS tickets, is_active, created_on, modified_on, last_seen_on,
    EXTRACT(EPOCH FROM modified_on) * 1000000 as modified_on_mu,
    (
      SELECT array_to_json(array_agg(row_to_json(u)))
@@ -360,7 +400,7 @@ SELECT org_id, id, modified_on, is_active, row_to_json(t) FROM (
                        select case
                     when value ? 'ward'
                       then jsonb_build_object(
-                        'ward_keyword', trim(substring(value ->> 'ward' from  '(?!.* > )([\w ]+)'))
+                        'ward_keyword', trim(substring(value ->> 'ward' from  '(?!.* > )([^>]+)'))
                       )
                     else '{}' :: jsonb
                     end || district_value.value as value
@@ -368,7 +408,7 @@ SELECT org_id, id, modified_on, is_active, row_to_json(t) FROM (
                   select case
                            when value ? 'district'
                              then jsonb_build_object(
-                               'district_keyword', trim(substring(value ->> 'district' from  '(?!.* > )([\w ]+)'))
+                               'district_keyword', trim(substring(value ->> 'district' from  '(?!.* > )([^>]+)'))
                              )
                            else '{}' :: jsonb
                            end || state_value.value as value
@@ -377,7 +417,7 @@ SELECT org_id, id, modified_on, is_active, row_to_json(t) FROM (
                          select case
                                   when value ? 'state'
                                     then jsonb_build_object(
-                                      'state_keyword', trim(substring(value ->> 'state' from  '(?!.* > )([\w ]+)'))
+                                      'state_keyword', trim(substring(value ->> 'state' from  '(?!.* > )([^>]+)'))
                                     )
                                   else '{}' :: jsonb
                                   end ||
@@ -404,187 +444,17 @@ SELECT org_id, id, modified_on, is_active, row_to_json(t) FROM (
 `
 
 // settings and mappings for our index
-const indexSettings = `
-{
-	"settings": {
-		"index": {
-			"number_of_shards": 2,
-			"number_of_replicas": 1,
-			"routing_partition_size": 1
-		},
-		"analysis": {
-            "analyzer": {
-                "trigrams": {
-                    "type":      "custom",
-                    "tokenizer": "trigram",
-                    "filter": [
-                        "lowercase"
-                    ]
-				},
-				"locations": {
-					"tokenizer": "location_tokenizer",
-					"filter": [
-						"lowercase",
-						"word_delimiter"
-					]
-				},
-				"prefix": {
-                    "type":      "custom",
-                    "tokenizer": "standard",
-                    "filter": [
-                        "lowercase",
-                        "prefix_filter"
-                    ]
-				},
-				"name_search": {
-					"type": "custom",
-					"tokenizer": "standard",
-					"filter": [
-						"lowercase",
-						"max_length"
-					]
-				}
-			},
-			"tokenizer": {
-				"location_tokenizer": {
-				  "type": "pattern",
-				  "pattern": "(.* > )?([^>]+)",
-				  "group": 2
-				},
-				"trigram": {
-					"type" : "ngram",
-					"min_gram" : 3,
-					"max_gram" : 3
-				}
-			},
-			"normalizer": {
-				"lowercase": {
-					"type": "custom",
-					"char_filter": [],
-					"filter": ["lowercase", "trim"]
-				}
-			},
-			"filter": {
-                "prefix_filter": {
-                    "type":     "edge_ngram",
-                    "min_gram": 2,
-                    "max_gram": 8
-				},
-				"max_length":{
-					"type": "truncate",
-					"length": 8
-				}
-	        }
-        }
-	},
-
-	"mappings": {
-		"properties": {
-			"fields": {
-				"type": "nested",
-				"properties": {
-					"field": {
-						"type": "keyword"
-					},
-					"text": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-					},
-					"number": {
-						"type": "scaled_float",
-						"scaling_factor": 10000
-					},
-					"datetime": {
-						"type": "date"
-					},
-					"state": {
-						"type": "text",
-						"analyzer": "locations"
-					},
-                    "state_keyword": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-                    },
-					"district": {
-						"type": "text",
-						"analyzer": "locations"
-					},
-					"district_keyword": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-                    },
-					"ward": {
-						"type": "text",
-						"analyzer": "locations"
-					},
-					"ward_keyword": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-                    }
-				}
-			},
-			"urns": {
-				"type": "nested",
-				"properties": {
-					"path": {
-						"type": "text",
-						"analyzer": "trigrams",
-						"fields": {
-							"keyword": {
-								"type": "keyword",
-								"normalizer": "lowercase"
-							}
-						}
-					},
-					"scheme": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-					}
-				}
-			},
-			"groups": {
-				"type": "keyword"
-			},
-			"uuid": {
-				"type": "keyword"
-			},
-			"language": {
-				"type": "keyword",
-				"normalizer": "lowercase"
-			},
-			"modified_on": {
-				"type": "date"
-			},
-			"created_on": {
-				"type": "date"
-			},
-			"modified_on_mu": {
-				"type": "long"
-			},
-			"name": {
-				"type": "text",
-				"analyzer": "prefix",
-				"search_analyzer": "name_search",
-				"fields": {
-					"keyword": {
-						"type": "keyword",
-						"normalizer": "lowercase"
-					}
-				}
-			}
-		}
-	}
-}
-`
+//go:embed contacts/index_settings.json
+var indexSettings string
 
 // gets our last modified contact
 const lastModifiedQuery = `{ "sort": [{ "modified_on_mu": "desc" }]}`
 
 // indexes a contact
-const indexCommand = `{ "index": { "_id": %d, "_type": "_doc", "version": %d, "version_type": "external", "routing": %d } }`
+const indexCommand = `{ "index": { "_id": %d, "_type": "_doc", "version": %d, "version_type": "external", "routing": %d} }`
 
 // deletes a contact
-const deleteCommand = `{ "delete" : { "_id": %d, "_type": "_doc", "version": %d, "version_type": "external", "routing": %d } }`
+const deleteCommand = `{ "delete" : { "_id": %d, "_type": "_doc", "version": %d, "version_type": "external", "routing": %d} }`
 
 // adds an alias for an index
 type addAliasCommand struct {
@@ -611,8 +481,7 @@ type aliasCommand struct {
 type queryResponse struct {
 	Hits struct {
 		Total struct {
-			Value    int    `json:"value"`
-			Relation string `json:"relation"`
+			Value int `json:"value"`
 		} `json:"total"`
 		Hits []struct {
 			Source struct {
