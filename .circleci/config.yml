@@ -42,9 +42,11 @@ jobs:
 
             docker login -u "${DOCKER_USER}" -p "${DOCKER_PASS}"
             echo "Building Docker container ${IMAGE_NAME}:${IMAGE_TAG}…"
-            source scm/utils.sh; buildImage "${IMAGE_NAME}" "${IMAGE_TAG}"  "Dockerfile" \
+            docker build --progress=plain \
+              -t ${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile . \
               --build-arg "BUILD_NUMBER=${CIRCLE_BUILD_NUM}" \
               --build-arg "ARCH=${IMAGE_TAG##*-}/"
+            docker push "${IMAGE_NAME}:${IMAGE_TAG}"
 
   build-arm64:
     machine:
@@ -61,9 +63,11 @@ jobs:
 
             docker login -u "${DOCKER_USER}" -p "${DOCKER_PASS}"
             echo "Building Docker container ${IMAGE_NAME}:${IMAGE_TAG}…"
-            source scm/utils.sh; buildImage "${IMAGE_NAME}" "${IMAGE_TAG}"  "Dockerfile" \
+            docker build --progress=plain \
+              -t ${IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile . \
               --build-arg "BUILD_NUMBER=${CIRCLE_BUILD_NUM}" \
               --build-arg "ARCH=${IMAGE_TAG##*-}/"
+            docker push "${IMAGE_NAME}:${IMAGE_TAG}"
 
   create-manifest:
     docker:
