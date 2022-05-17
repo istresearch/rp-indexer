@@ -128,9 +128,13 @@ workflows:
       - pre-build:
           context: globalconfig
           filters: &build-filters
-            tags:
+            branches:
               ignore:
-                - /^test-.*/
+                - main
+                - master
+            tags:
+              only:
+                - /^v\d.*/
       - build-amd64:
           context: globalconfig
           requires:
