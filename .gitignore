@@ -23,4 +23,5 @@ rp-indexer
 
 .DS_Store
 .idea
-_*
+_*/
+.v/
